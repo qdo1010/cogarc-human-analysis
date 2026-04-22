@@ -28,3 +28,9 @@ ENV/
 .idea/
 *.swp
 *.swo
+
+# MS Office lock files
+~$*.docx
+~$*.doc
+~$*.xlsx
+~$*.pptx
