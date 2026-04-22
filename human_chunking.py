@@ -127,27 +127,37 @@ def chunk_features(chunk: List[Dict]) -> Dict:
 # Success-component IoU (do chunks align with Success components?)
 # ---------------------------------------------------------------------------
 
-def _success_components(task_id: str) -> Tuple[np.ndarray, List[set]]:
+def _success_components(task_id: str) -> Tuple[np.ndarray, List[set], Dict[int, set]]:
+    """Returns (success_grid, list_of_cc_masks, color_to_cellset).
+
+    The color_to_cellset dict groups all Success-grid cells by color (a
+    single key per color, regardless of 4-connectivity). This is the
+    target set for the ``chunk vs color class`` comparison.
+    """
     t = human_targets(task_id)
     success = None
     for lbl, g in zip(t["labels"], t["grids"]):
         if lbl == "Success":
             success = g; break
     if success is None:
-        return np.array([]), []
+        return np.array([]), [], {}
     bg_vals, bg_counts = np.unique(success, return_counts=True)
     bg = int(bg_vals[np.argmax(bg_counts)])
     comp_masks: List[set] = []
+    color_sets: Dict[int, set] = {}
     for color in np.unique(success):
         if int(color) == bg:
             continue
         mask = (success == color)
+        color_sets[int(color)] = set(
+            map(tuple, np.argwhere(mask).tolist())
+        )
         labels, n = cc_label(mask, structure=np.array(
             [[0, 1, 0], [1, 1, 1], [0, 1, 0]]))
         for cid in range(1, n + 1):
             coords = np.argwhere(labels == cid)
             comp_masks.append(set(map(tuple, coords.tolist())))
-    return success, comp_masks
+    return success, comp_masks, color_sets
 
 
 def best_iou_with_success(chunk: List[Dict], comp_masks: List[set]) -> Tuple[float, int]:
@@ -166,12 +176,35 @@ def best_iou_with_success(chunk: List[Dict], comp_masks: List[set]) -> Tuple[flo
     return float(best), int(best_id)
 
 
+def color_class_iou(chunk: List[Dict],
+                    color_sets: Dict[int, set]) -> Tuple[float, int]:
+    """IoU of the chunk's cells against the Success color-class that gives
+    the best match (one target per color, regardless of 4-connectivity)."""
+    cells = {(e["y"], e["x"]) for e in chunk}
+    if not cells or not color_sets:
+        return 0.0, -1
+    best, best_color = 0.0, -1
+    for color, target in color_sets.items():
+        inter = len(cells & target)
+        if inter == 0:
+            continue
+        iou = inter / len(cells | target)
+        if iou > best:
+            best, best_color = iou, color
+    return float(best), int(best_color)
+
+
+def n_success_cc_spanned(chunk: List[Dict], comp_masks: List[set]) -> int:
+    cells = {(e["y"], e["x"]) for e in chunk}
+    return sum(1 for c in comp_masks if cells & c)
+
+
 # ---------------------------------------------------------------------------
 # Batch computation
 # ---------------------------------------------------------------------------
 
 def chunks_for_task(task_id: str) -> List[Dict]:
-    _, comp_masks = _success_components(task_id)
+    _, comp_masks, color_sets = _success_components(task_id)
     traj_dir = os.path.join(DEFAULT_DATA_ROOT, _EXP2_EDIT_DIR,
                             f"{task_id}.json")
     out: List[Dict] = []
@@ -188,16 +221,21 @@ def chunks_for_task(task_id: str) -> List[Dict]:
         chunks = identify_chunks(tr["edits"])
         for k, ch in enumerate(chunks):
             feats = chunk_features(ch)
-            iou, best_id = best_iou_with_success(ch, comp_masks)
+            iou_cc, best_cc = best_iou_with_success(ch, comp_masks)
+            iou_color, best_color = color_class_iou(ch, color_sets)
+            n_cc = n_success_cc_spanned(ch, comp_masks)
             row = {
                 "task_id": task_id,
                 "subject_id": subj,
                 "chunk_index": k,
                 "n_chunks_total": len(chunks),
                 **feats,
-                "success_iou_best": iou,
-                "success_component_matched": best_id,
+                "success_iou_best": iou_cc,
+                "success_component_matched": best_cc,
                 "n_success_components": len(comp_masks),
+                "success_iou_color_class": iou_color,
+                "success_color_class_matched": best_color,
+                "n_success_cc_spanned": n_cc,
             }
             out.append(row)
     return out

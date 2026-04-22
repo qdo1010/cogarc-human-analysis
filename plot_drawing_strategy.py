@@ -176,19 +176,39 @@ def build_figure():
                   loc="left", pad=8)
     axD.legend(frameon=False)
 
-    # --- E: IoU with Success components ---
+    # --- E: Chunk ↔ Success segmentation (CC vs color class) ---
     axE = fig.add_subplot(gs[1, 1])
-    ious = chunks["success_iou_best"].values
-    axE.hist(ious, bins=40, color="#b84a3d", edgecolor="#222", linewidth=0.3)
-    axE.axvline(np.median(ious), color="#333", lw=2,
-                label=f"median IoU = {np.median(ious):.2f}")
-    axE.set_xlabel("Best IoU of chunk vs any Success-grid component")
-    axE.set_ylabel("Chunks")
-    axE.set_title("E.  Chunks DO NOT align with Success components\n"
-                  "(most chunks have low IoU ⇒ humans chunk by color+timing, "
-                  "not by connected components)",
-                  loc="left", pad=8)
-    axE.legend(frameon=False)
+    n_cc = chunks["n_success_cc_spanned"].values
+    # 3-way composition: 0-CC (wrong cells), 1-CC (object-wise), 2+-CC (color-over-CC)
+    frac_out = float((n_cc == 0).mean())
+    frac_one = float((n_cc == 1).mean())
+    frac_multi = float((n_cc >= 2).mean())
+    multi_mask = (chunks["n_success_cc_spanned"] >= 2)
+    color_homo_in_multi = float(
+        (chunks.loc[multi_mask, "color_homogeneity"] >= 0.95).mean()
+    )
+    cats = [
+        ("on wrong cells\n(outside Success)", frac_out, "#9a9a9a"),
+        ("inside exactly\n1 Success CC", frac_one, "#3a66a5"),
+        ("spanning 2+ CCs,\nsame color", frac_multi * color_homo_in_multi, "#b84a3d"),
+        ("spanning 2+ CCs,\nmixed color", frac_multi * (1 - color_homo_in_multi), "#e0a9a1"),
+    ]
+    labels, vals, colors = zip(*cats)
+    bars = axE.barh(np.arange(len(cats)), vals, color=colors,
+                    edgecolor="#222", linewidth=0.7)
+    axE.set_yticks(np.arange(len(cats)))
+    axE.set_yticklabels(labels)
+    axE.invert_yaxis()
+    axE.set_xlim(0, max(vals) * 1.25)
+    for i, v in enumerate(vals):
+        axE.text(v + 0.008, i, f"{v:.0%}", va="center",
+                 fontsize=12, color="#222")
+    axE.set_xlabel("Fraction of all 130 k chunks")
+    axE.set_title(
+        "E.  How chunks relate to the connected-component segmentation\n"
+        "22% of chunks cross CC boundaries — 95% of those stay in one color",
+        loc="left", pad=8,
+    )
 
     # --- F: exemplar trajectory colored by chunk ---
     axF = fig.add_subplot(gs[1, 2])
@@ -199,7 +219,7 @@ def build_figure():
         ex_subj = subj_candidates.sort_values().index[len(subj_candidates) // 2]
     else:
         ex_subj = None
-    success, comp_masks = _success_components(ex_task)
+    success, comp_masks, _ = _success_components(ex_task)
     # Load this subject's trajectory
     traj_dir = os.path.join(DEFAULT_DATA_ROOT, _EXP2_EDIT_DIR, f"{ex_task}.json")
     traj = None
