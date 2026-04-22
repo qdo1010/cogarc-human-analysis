@@ -1,0 +1,245 @@
+MOTOR SLIP vs COGNITIVE ERROR
+Classification of edit-level errors in the CogARC Experiment 2 dataset
+=====================================================================
+
+1. DATA
+-------
+
+Source:
+    Boston University CogARC Data Repository (Zenodo 18177487).
+    https://zenodo.org/records/18177487
+
+We use only the Experiment 2 behavioral data:
+    Behavioral data/Experiment 2/Submissions/<task_id>.json/           (final submitted grids)
+    Behavioral data/Experiment 2/Edit sequences/<task_id>.json/        (per-subject action logs)
+    Common solutions/<task_id>.json/                                    (Success + Top Error grids)
+    Task tags.csv                                                       (Obj/Geo/Num/GoD + complexity)
+
+Scope after parsing:
+    - 75 tasks
+    - 233 unique subjects
+    - 14,107 trajectories (one subject-task trial each)
+    - ~19,900 individual wrong edits classified
+
+An "edit" is one <action=edit, x, y, color, time, rt> row in a subject's
+trajectory CSV. Per the CogARC README, x/y use 0-indexed grid coordinates
+(grid[y][x]) and color values 0-9 follow the CogARC color legend. Grids
+used throughout are the Success grid (the canonical correct answer, which
+coincides with the ARC test output) and the Top Error 1..K grids (the
+most frequent wrong answers submitted on first attempt in Experiment 2).
+
+
+2. PER-EDIT SIGNALS
+-------------------
+
+For each edit event we decide whether the cell the participant placed
+matches the Success grid at that (x, y). If it does, the edit is labeled
+"correct" and ignored by the error classifier. For each WRONG edit we
+compute five signals:
+
+    a) spatial_dist_to_correct  — Manhattan distance from (x, y) to the
+       nearest cell whose Success-grid color equals the edited color.
+       Small = "I picked the right color but clicked one cell off".
+
+    b) quickly_corrected  — did the participant later edit the SAME cell
+       back to the Success color, and was that restoration either
+       (i) within the next 3 edits, or (ii) within 2000 ms? If yes, the
+       slip was noticed and fixed immediately, a motor signature.
+
+    c) rt_z  — this edit's reaction time standardized against the
+       subject's median RT on this trial (robust z = (rt - med) /
+       (1.4826 * MAD)). Large positive values mean the participant
+       paused before placing the cell — more likely deliberate.
+
+    d) matches_top_error  — at this (x, y), does the edited color equal
+       what any Top Error grid has at the same cell? Systematic matches
+       indicate a shared wrong rule, i.e. a cognitive failure.
+
+    e) in_wrong_run  — build the mask of all cells whose FINAL painted
+       color differs from Success, then 4-connected-components it. If
+       this cell lies in a wrong component of size >= 3, the edit is
+       part of a sustained wrong region. Motor slips are isolated;
+       cognitive errors tend to come as coherent wrong shapes.
+
+
+3. CLASSIFICATION RULE
+----------------------
+
+Constants (set in human_error_type.py):
+    BURST_CORRECTION_MS    = 2000.0
+    BURST_CORRECTION_EDITS = 3
+    SPATIAL_MOTOR_MAX      = 1      # Manhattan distance treated as a slip
+    RT_Z_COGNITIVE         = 1.5    # z above this counts as "paused"
+
+For each wrong edit:
+
+    if spatial_dist_to_correct <= SPATIAL_MOTOR_MAX
+       and (quickly_corrected
+            or (not in_wrong_run
+                and not matches_top_error
+                and rt_z < RT_Z_COGNITIVE)):
+        class = "motor"
+
+    elif matches_top_error
+         or in_wrong_run
+         or (spatial_dist_to_correct >= 2 and not quickly_corrected)
+         or rt_z >= RT_Z_COGNITIVE:
+        class = "cognitive"
+
+    else:
+        class = "ambiguous"
+
+In words: an edit is motor only when it is spatially close to a correct
+target AND either the participant fixed it fast or nothing else suggests
+deliberation. Anything systematic, far, paused-before, or unfixed is
+cognitive. The remainder is explicitly labeled ambiguous.
+
+
+4. PER-TRAJECTORY AND PER-TASK AGGREGATION
+------------------------------------------
+
+Per trajectory we count n_motor, n_cognitive, n_ambiguous and record
+the mean RT for motor and for cognitive edits separately.
+
+Per task (across ~180-200 subjects) we then compute:
+    motor_rate         = mean over subjects of (n_motor / n_wrong)
+    cognitive_rate     = mean over subjects of (n_cognitive / n_wrong)
+    ambiguous_rate     = 1 - motor_rate - cognitive_rate
+    mean_rt_motor      = mean over subjects of per-subject mean RT on motor edits
+    mean_rt_cognitive  = mean over subjects of per-subject mean RT on cognitive edits
+
+Bootstrap 95% confidence intervals: for each task we resample its
+subjects with replacement 500 times and take the 2.5/97.5 percentiles
+of the resampled mean rates.
+
+Final bucket per task:
+    motor-dominant       if motor_rate >= 0.20
+    mixed                if 0.05 <= motor_rate < 0.20
+    cognitive-dominant   if motor_rate <  0.05
+
+With this cutoff the 75 CogARC tasks break down as:
+    motor-dominant       10 tasks
+    mixed                20 tasks
+    cognitive-dominant   45 tasks
+
+
+5. VALIDATION
+-------------
+
+Three independent checks support the classifier:
+
+    i)  Reaction-time separation. Across ~20 k wrong edits, motor-labeled
+        edits have a median RT of ~350 ms and cognitive-labeled edits
+        have a median RT of ~940 ms — a ~3x gap (log-scale histogram
+        in prior_analysis/motor_vs_cognitive_figure.png, panel B).
+
+    ii) Per-task RT ordering. In every single one of the 75 tasks,
+        mean cognitive RT > mean motor RT (panel E of the same figure:
+        all 75 dots fall above the diagonal).
+
+    iii) Split-half reliability. Randomly split each task's subjects
+        into two halves, recompute motor_rate and cognitive_rate in
+        each half, and correlate across tasks:
+
+            Spearman rho on motor_rate     = 0.93
+            Spearman rho on cognitive_rate = 0.98
+
+        (averaged over 50 random 50/50 splits, with 75 tasks as the
+        correlation items). So task-level rates are not sampling noise;
+        they replicate from any random half-sample of participants.
+
+
+6. OUTPUTS
+----------
+
+    prior_analysis/tasks_sorted_motor_cognitive.csv
+        One row per task, sorted by motor_rate descending. Columns:
+        task_id, n_subjects, mean_n_wrong_per_subj,
+        motor_rate, motor_ci95_lo, motor_ci95_hi,
+        cognitive_rate, cognitive_ci95_lo, cognitive_ci95_hi,
+        ambiguous_rate,
+        mean_rt_motor, mean_rt_cognitive,
+        complexity, primary_tag, secondary_tag, tertiary_tag,
+        bucket, motor_minus_cog.
+
+    prior_analysis/motor_vs_cognitive_figure.png
+        Panel A: all 75 tasks sorted by motor_rate, bars colored by
+                 primary tag, 95% bootstrap CI whiskers, top-3 motor
+                 and top-3 cognitive task IDs labeled.
+        Panel B: RT distribution of motor vs cognitive edits (pooled).
+        Panel C: split-half reliability scatter (half A vs half B).
+        Panel D: bucket composition (pie: 10/20/45).
+        Panel E: per-task mean RT cognitive vs mean RT motor (all 75
+                 points above diagonal).
+
+    prior_analysis/motor_cognitive_case_studies.png
+        Six rows: top 3 motor-dominant and top 3 cognitive-dominant
+        tasks. Each row shows the actual ARC task (train pairs plus
+        test input, from Task example PNGs) next to one representative
+        Experiment 2 participant's trajectory, with each edit colored
+        by class (green=correct, blue=motor, red=cognitive, grey=ambig).
+
+    prior_analysis/motor_vs_cognitive_reliability.txt
+        Stored split-half rhos (0.93 motor, 0.98 cognitive).
+
+    prior_analysis/error_types.csv            — per-trajectory counts
+    prior_analysis/error_types_per_task.csv   — per-task aggregates
+
+
+7. CAVEATS AND KNOWN LIMITS
+---------------------------
+
+    - When a task systematically induces a common wrong answer (e.g.
+      1c02dbbe, where 100% of wrong edits are labeled cognitive), the
+      matches_top_error and in_wrong_run rules fire on nearly every
+      wrong edit by construction. That is the INTENDED behavior (the
+      participant did reason wrongly and drew the wrong shape), but it
+      means the cognitive count on such tasks is saturated and further
+      discrimination by RT or spatial distance is not visible there.
+
+    - Tasks where participants barely draw (few wrong edits) have noisy
+      per-task rates; the bootstrap CIs on the right tail of panel A
+      are wider for this reason.
+
+    - The RT z-score and wrong-run-size thresholds (RT_Z_COGNITIVE=1.5,
+      size>=3) are defensible but tunable. Loosening or tightening them
+      shifts roughly 5-10 tasks between the mixed and cognitive-dominant
+      buckets. Split-half reliability stays above 0.9 across a
+      reasonable range of these thresholds.
+
+    - Motor vs cognitive are defined *at the edit level*, not the
+      trajectory level. A single participant can make both motor slips
+      and cognitive errors in the same trial, and we count each edit
+      independently. The per-task "motor-dominant" label therefore
+      means "a large fraction of the wrong edits pooled across
+      participants look motor", not that each participant slips
+      rather than reasons wrongly.
+
+    - All measures are computed only on _submission1.json files (first
+      attempts), matching how the Common solutions grids are derived.
+
+
+8. REPRODUCING THE ANALYSIS
+---------------------------
+
+All code is in the ARC-GNN working tree. To regenerate from scratch:
+
+    1. Obtain the CogARC data:
+           data/CogARC-dataRepository/ (unzip the Zenodo archive)
+
+    2. Per-trajectory classification, per-task aggregation, plus the
+       split-half reliability run:
+           python human_error_type.py
+       This writes prior_analysis/error_types.csv and
+       prior_analysis/error_types_per_task.csv.
+
+    3. Sorted table, bootstrap CIs, and both figures:
+           python motor_vs_cognitive.py
+       This writes the sorted CSV, the two PNG figures, and the
+       reliability text file.
+
+Key source files:
+    human_targets.py          — loads Success + Top Error grids per task
+    human_style_features.py   — parses Experiment 2 edit-sequence CSVs
+    human_error_type.py       — per-edit classifier (Section 3)
+    motor_vs_cognitive.py     — aggregation, bootstrap, figures
