@@ -188,25 +188,24 @@ def build_figure():
         (chunks.loc[multi_mask, "color_homogeneity"] >= 0.95).mean()
     )
     cats = [
-        ("on wrong cells\n(outside Success)", frac_out, "#9a9a9a"),
-        ("inside exactly\n1 Success CC", frac_one, "#3a66a5"),
-        ("spanning 2+ CCs,\nsame color", frac_multi * color_homo_in_multi, "#b84a3d"),
-        ("spanning 2+ CCs,\nmixed color", frac_multi * (1 - color_homo_in_multi), "#e0a9a1"),
+        ("outside Success", frac_out, "#9a9a9a"),
+        ("inside 1 CC", frac_one, "#3a66a5"),
+        ("span 2+ CCs,\nsame color", frac_multi * color_homo_in_multi, "#b84a3d"),
+        ("span 2+ CCs,\nmixed color", frac_multi * (1 - color_homo_in_multi), "#e0a9a1"),
     ]
     labels, vals, colors = zip(*cats)
-    bars = axE.barh(np.arange(len(cats)), vals, color=colors,
-                    edgecolor="#222", linewidth=0.7)
+    axE.barh(np.arange(len(cats)), vals, color=colors,
+             edgecolor="#222", linewidth=0.7)
     axE.set_yticks(np.arange(len(cats)))
-    axE.set_yticklabels(labels)
+    axE.set_yticklabels(labels, fontsize=12)
     axE.invert_yaxis()
-    axE.set_xlim(0, max(vals) * 1.25)
+    axE.set_xlim(0, max(vals) * 1.30)
     for i, v in enumerate(vals):
         axE.text(v + 0.008, i, f"{v:.0%}", va="center",
-                 fontsize=12, color="#222")
+                 fontsize=12, color="#222", fontweight="bold")
     axE.set_xlabel("Fraction of all 130 k chunks")
     axE.set_title(
-        "E.  How chunks relate to the connected-component segmentation\n"
-        "22% of chunks cross CC boundaries — 95% of those stay in one color",
+        "E.  Chunks vs connected-component segmentation",
         loc="left", pad=8,
     )
 

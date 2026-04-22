@@ -1,0 +1,240 @@
+DRAWING-STRATEGY FINDINGS
+Experiment-2 edit sequences on the 75 CogARC tasks
+=====================================================
+
+Two questions answered:
+
+    1. Which Success-grid components do humans draw first?
+    2. When a human pauses and then draws again, what is the
+       "cognitive chunk" they just produced, and how does it relate
+       to the connected-component segmentation a GNN prior would
+       use?
+
+Population:
+    14,107 trajectories · 233 subjects · 75 tasks · 1,491 Success
+    components · 130,015 chunks.
+
+
+------------------------------------------------------------------------
+1. COMPONENT PRIORITY  (which objects get drawn first)
+------------------------------------------------------------------------
+
+Method
+------
+For every Experiment 2 trajectory we scan the edit sequence in order.
+The moment an edit lands on a cell of a given 4-connected Success
+component, that component is marked "touched". Its rank is the index
+of that edit in the full trajectory, normalized to [0, 1] (0 = first
+edit of the trajectory, 1 = last). Averaging across participants gives
+a per-component "touch priority" — lower values mean the component is
+drawn earlier.
+
+We then regress touch priority on per-component features with task
+fixed effects (z-score features and target within each task, then run
+simple OLS per feature). This isolates *which attributes of a
+component* make it attract early attention, controlling for task.
+
+Results
+-------
+Across 1,316 components with usable data (1,491 - ones no one touched):
+
+    feature                 beta         Spearman
+                         (within-task)     rho    p
+    ---------------------------------------------------
+    area                    -0.253       -0.146  <.001
+    bbox_w                  -0.238       -0.137  <.001
+    is_unique_color         -0.231       -0.077   .005
+    bbox_h                  -0.220       -0.122  <.001
+    color_frac_among_nonbg  -0.112       -0.119  <.001
+    dist_center             -0.071       -0.071   .010
+    is_rarest_color         -0.055       -0.029   .289
+    boundary_frac           +0.230       +0.075   .007
+    fill_ratio              +0.272       +0.130  <.001
+    bbox_aspect             +0.005       +0.022   .434
+
+Interpretation
+    Negative beta = higher values of the feature predict EARLIER touch.
+    Positive beta = higher values predict LATER touch.
+
+    The rank order of attention is:
+
+        1. Big components (area, bbox_w, bbox_h)
+        2. Components whose color appears nowhere else
+           (is_unique_color)
+        3. Components in the dominant non-background color
+        4. Components closer to the center
+        5. Dense, compact shapes
+        6. ... while thin / high-boundary / sparse shapes are saved
+           for last (boundary_frac and fill_ratio both flip sign).
+
+    "Rarest" in a count sense (the color with the fewest components
+    in the task) is not a reliable predictor on its own; it is
+    "unique" (exactly one component of that color) that matters.
+
+Actionable takeaway
+    A human-informed GNN attention prior should initialize node
+    importance using a monotone function of area, color-uniqueness,
+    centrality, and compactness. These are cheap to compute from the
+    input grid before any message passing.
+
+
+------------------------------------------------------------------------
+2. DRAWING CHUNKS  (what is the participant's cognitive unit?)
+------------------------------------------------------------------------
+
+Method
+------
+Each trajectory is split at pauses longer than
+
+        max( 2 * subject_median_rt ,  500 ms ),
+
+yielding a sequence of chunks. Within each chunk we record:
+
+    size                   — number of edits in the chunk
+    n_cells                — distinct cells edited
+    n_colors               — distinct colors placed
+    color_homogeneity      — fraction of edits using the modal color
+    is_connected           — whether the cells form one 4-connected blob
+    cc_count               — number of 4-connected components of the cells
+    bbox / bbox_area       — spatial footprint
+
+For each chunk we also compute, against the task's Success grid:
+
+    success_iou_best              IoU vs the best-matching Success CC
+    success_iou_color_class       IoU vs all Success cells of one color
+    n_success_cc_spanned          how many distinct Success CCs the
+                                  chunk touches (0 if the chunk is
+                                  entirely on wrong cells)
+
+Results
+-------
+Chunks are small and nearly monochromatic:
+
+    median chunk size .......... 3 edits
+    median color homogeneity ... 1.00   (i.e. single-color)
+    median n_colors ............ 1
+    mean chunks per trajectory . 9.2
+
+Composition across the 130,015 chunks:
+
+    41 %   entirely outside Success  (all edits on wrong cells)
+    37 %   inside exactly one Success connected component
+    21 %   span 2 or more Success connected components,
+           single-color         <-- "color-over-connectivity" chunks
+     1 %   span 2 or more Success components, mixed color
+
+The headline number: within the 22 % of chunks that cross CC
+boundaries, 95 % stay in one color. So when people violate the
+connected-component segmentation, they do so by grouping disjoint
+SAME-color regions — not by jumping between different colors.
+
+Per-task variation is large. Tasks where the solution rule itself is
+color-class (like "paint every square of color C") induce very high
+color-over-CC rates:
+
+    task_id    frac_chunks_multi_cc
+    -------    --------------------
+    0d3d703e   94 %
+    3aa6fb7a   89 %
+    6ea4a07e   73 %
+    0b17323b   72 %
+    bcb3040b   68 %
+    32597951   58 %
+    d511f180   62 %
+
+On tasks where the solution is "complete one shape, then the next",
+the multi-CC rate drops below 20 % and chunks align cleanly with
+components. So the relative prominence of the two segmentation modes
+is itself a per-task property of the solution rule.
+
+Interpretation
+    Humans do chunk, and their chunks are small monochromatic units.
+    Most chunks stay inside one connected component, consistent with
+    object-at-a-time drawing. But a substantial and systematic
+    minority of chunks — roughly one in five — cross CC boundaries
+    while holding color constant, which means the primary
+    segmentation axis that drives chunking is COLOR. Connectivity is
+    secondary. On tasks whose solution rule is color-indexed, the
+    ordering reverses and color becomes dominant.
+
+Actionable takeaway
+    A single connected-component prior (hierarchical, containment,
+    or 4-connected segmentation) loses roughly one in five cognitive
+    chunks. A color-class prior is no better on its own because it
+    over-merges components of the same color into one giant node.
+    The prior that matches human behaviour is a HYBRID: nodes indexed
+    by (color, component_id) with an additional edge family linking
+    all components of the same color. The per-task fraction
+    frac_chunks_multi_cc can be used directly to weight how much the
+    color edges dominate over the connectivity edges in the graph.
+
+
+------------------------------------------------------------------------
+3. OUTPUTS
+------------------------------------------------------------------------
+
+prior_analysis/component_priority_per_task.csv
+    One row per Success component, with its features + mean touch
+    priority across Experiment 2 subjects.
+
+prior_analysis/component_priority_feature_regression.csv
+    The beta / Spearman table reproduced in Section 1.
+
+prior_analysis/chunks_per_trajectory.csv        (regenerable, gitignored)
+    One row per chunk across every trajectory.
+
+prior_analysis/chunk_task_summary.csv
+    Per-task chunk aggregates (mean size, color homogeneity,
+    connected fraction, IoU summaries).
+
+prior_analysis/drawing_strategy_figure.png
+    Six-panel figure:
+        A  Feature regression bar chart (Section 1).
+        B  Component area vs touch priority scatter.
+        C  Exemplar task with component ranks.
+        D  Chunk-size distribution.
+        E  4-way chunk composition vs connected-component segmentation.
+        F  Exemplar trajectory colored by chunk membership.
+
+
+------------------------------------------------------------------------
+4. CAVEATS
+------------------------------------------------------------------------
+
+- The 41 % "outside Success" chunks are partly participants who are
+  drawing a coherent but WRONG answer (the Top Error patterns). They
+  still look like chunks but they are not aligned with Success by
+  construction.
+
+- Touch priority is normalized by trajectory length; a component that
+  is the last thing in a 5-edit trajectory and a component that is
+  the last thing in a 200-edit trajectory both score 1.0. This is
+  intentional (priority is about relative ordering within a
+  participant's plan) but means the metric is insensitive to how
+  LONG participants spend before reaching a component.
+
+- The chunking pause threshold ( max(2*median_rt, 500 ms) ) is
+  defensible but tunable. Loosening it to 1.5x or tightening to 3x
+  shifts mean chunk size by 1-2 edits; the rank ordering of tasks
+  by frac_multi_cc is robust (Spearman > 0.9 across reasonable
+  threshold choices).
+
+- Experiment 2 trial order is randomized per subject and is NOT
+  exposed in the Zenodo release. All analyses here pool over the
+  entire session; within-subject progression effects can only be
+  studied on Experiment 1 (fixed task order, 49 subjects).
+
+
+------------------------------------------------------------------------
+5. REPRODUCING
+------------------------------------------------------------------------
+
+From the repository root:
+
+    python human_component_priority.py      # Section 1 outputs
+    python human_chunking.py                # Section 2 outputs
+    python plot_drawing_strategy.py         # regenerates the figure
+
+Each script resolves paths via _paths.py and writes into
+prior_analysis/. All three can be re-run independently; the figure
+reads the CSVs produced by the first two.
