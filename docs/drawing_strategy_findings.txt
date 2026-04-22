@@ -232,7 +232,118 @@ Actionable takeaway
 
 
 ------------------------------------------------------------------------
-3. OUTPUTS
+3. ARE HUMANS JUST FOLLOWING THE TASK RULE?  (strategy comparison)
+------------------------------------------------------------------------
+
+Method
+------
+A natural objection to Section 2 is that if a task's Success grid is
+itself a collection of horizontal bars, chunks will trivially look
+horizontal — there is nothing else to chunk. To rule this out we
+generated six synthetic "drawing strategies" that each produce the
+same Success grid but with different chunk organization, then
+compared each strategy's chunk fingerprint against the real humans.
+
+Strategies:
+
+    random_k3        cells in random order, chunks of size 3
+    color_first      paint all of color A, then color B, ...;
+                     one chunk per color (no intra-color order)
+    nn_color_first   color_first, but within each color paint in
+                     nearest-neighbor order starting top-left
+    object_first     one 4-connected component per chunk, painted
+                     in nearest-neighbor order
+    row_first        one row of non-background cells per chunk
+    col_first        one column of non-background cells per chunk
+
+For each strategy on each task we recompute the same ten chunk-level
+features (mean chunk size, frac_single_color, frac_connected,
+frac_same_row, frac_same_col, frac_multi_cc_spanned,
+frac_multi_cc_same_color, frac_one_cc, mean_iou_cc,
+mean_iou_color_class) and compare with the humans' per-task feature
+vector using column-z-scored Euclidean distance.
+
+Results
+-------
+Per-task closest-strategy counts:
+
+    object_first    25 / 75
+    random_k3       17 / 75
+    row_first       14 / 75
+    col_first       11 / 75
+    color_first      8 / 75
+    nn_color_first   0 / 75
+
+Mean distance (lower = closer to humans):
+
+    object_first    3.48
+    row_first       3.68
+    col_first       3.68
+    random_k3       3.72
+    color_first     3.84
+    nn_color_first  3.84
+
+Interpretation
+    Humans are NOT any single canonical strategy. One third of tasks
+    are best explained by an object-first strategy, but 40 % of tasks
+    are closest to row/col/color strategies, and nearly a quarter are
+    closest to a random baseline. If participants were simply
+    bottlenecked by the task rule (only one valid way to chunk), one
+    strategy would win on almost every task. It does not.
+
+    This matters because it says humans have genuine behavioral
+    flexibility: the chunking pattern shifts per task, and on any
+    given task humans do look more like one canonical strategy than
+    another. Rank-1 strategy differs across tasks, so the aggregate
+    chunking fingerprint is a blend.
+
+Actionable takeaway
+    A single prior class (whether connected-component or color-class
+    or row/col) will only fit a subset of tasks. A GNN that picks
+    its prior per task using a cheap behavioral predictor is
+    strictly better justified than one with a fixed prior, because
+    humans themselves switch per task.
+
+Do task groups (Obj / Geo / Num / GoD or complexity) share a strategy?
+----------------------------------------------------------------------
+Merging the per-task winner table with the CogARC Task-tags CSV, no
+task group exhibits a strongly dominant strategy. Every primary tag
+has a plurality winner but each plurality is at best 44 %, not a
+tight cluster.
+
+    Winner counts by primary tag
+        tag  n   object  random  row  col  color  (plurality)
+        Obj  19       7       2    3    4      3   object_first 37 %
+        Geo  30       9      11    5    3      2   random_k3    37 %
+        Num  14       3       3    5    1      2   row_first    36 %
+        GoD   9       4       1    0    3      1   object_first 44 %
+
+    Winner counts by complexity
+        cx   n   object  random  row  col  color  (plurality)
+        1    20       7       6    5    1      1   object_first 35 %
+        2    37       9      10    5    8      5   mixed
+        3    15       7       1    3    2      2   object_first 47 %
+
+Complexity matters more than tag. Hard tasks (complexity 3) shift
+sharply toward object_first (47 % vs 35 % overall). On hard tasks
+humans invest in object-level reasoning; on easy / medium tasks they
+are more flexible.
+
+Dominance gap. For each task we computed the distance of its best
+strategy vs its second-best. The median gap is 0.25 out of baseline
+distances around 3.5, meaning on half the tasks at least two
+strategies fit humans within ~7 % of each other. Strategies are not
+only heterogeneous across tasks, they are also ambiguous within
+tasks.
+
+Bottom line: there is no canonical "way of drawing a task" that is
+stable across a group. Human drawing is task-level flexible. The
+only robust group-level effect is that harder tasks push behavior
+toward object-level chunking.
+
+
+------------------------------------------------------------------------
+4. OUTPUTS
 ------------------------------------------------------------------------
 
 prior_analysis/component_priority_per_task.csv
@@ -260,7 +371,7 @@ prior_analysis/drawing_strategy_figure.png
 
 
 ------------------------------------------------------------------------
-4. CAVEATS
+5. CAVEATS
 ------------------------------------------------------------------------
 
 - The 41 % "outside Success" chunks are partly participants who are
@@ -288,7 +399,7 @@ prior_analysis/drawing_strategy_figure.png
 
 
 ------------------------------------------------------------------------
-5. REPRODUCING
+6. REPRODUCING
 ------------------------------------------------------------------------
 
 From the repository root:
