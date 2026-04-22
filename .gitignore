@@ -9,6 +9,7 @@ prior_analysis/attention_graphs_visits.npz
 prior_analysis/first_edit_heatmaps.npz
 prior_analysis/error_types.csv
 prior_analysis/exp1_trial_trends.csv
+prior_analysis/chunks_per_trajectory.csv
 
 # Python
 __pycache__/
