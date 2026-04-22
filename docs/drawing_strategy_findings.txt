@@ -371,6 +371,108 @@ prior_analysis/drawing_strategy_figure.png
 
 
 ------------------------------------------------------------------------
+4b. WHAT ABOUT THE TASK PREDICTS WHICH STRATEGY HUMANS USE?
+------------------------------------------------------------------------
+
+Given that humans match different canonical strategies on different
+tasks (Section 4), is something about the TASK itself forcing the
+choice? We separated two hypotheses WITHOUT using the Obj/Geo/Num/GoD
+tags:
+
+  (H1) The task affords only one plausible strategy, so every human
+       picks it because there is nothing else to pick.
+  (H2) The task affords several strategies and humans converge on one
+       of them because the task features bias the choice.
+
+Operationalisations:
+
+  * affordance(task, s) = True iff the synthetic strategy produces
+    >= 2 chunks on the task's Success grid.
+  * n_afforded(task)    = how many of the 6 canonical strategies the
+                          task affords (0..6).
+  * human_entropy(task) = Shannon entropy (bits) over the distribution
+                          of each subject's best-matching strategy for
+                          that task.
+  * dominant_frac(task) = fraction of subjects choosing the modal
+                          strategy on that task.
+
+Pipeline: human_task_vs_strategy.py
+Outputs:  prior_analysis/task_features_for_strategy.csv
+          prior_analysis/subject_best_strategy.csv          (12 508 rows)
+          prior_analysis/task_vs_strategy_correlations.csv
+          prior_analysis/task_vs_strategy_usage_correlations.csv
+
+Findings:
+
+  (a) Affordance is nearly constant across tasks. 67 of 75 tasks
+      afford ALL 6 canonical strategies; the remaining 8 afford 3-4
+      (they are all single-output-color tasks that disable
+      color_first / nn_color_first). So H1 does almost no work: the
+      task hardly ever rules strategies out.
+
+  (b) Humans do NOT fill all afforded strategies. Mean
+      dominant_frac = 0.68 (std 0.19); on 10+ tasks one strategy
+      collects >= 90 % of subjects. Tasks range from near-perfect
+      agreement (dominant_frac > 0.95, entropy < 0.5 bits) to near-
+      chance (dominant_frac ~0.28, entropy > 2.0 bits).
+
+  (c) Aggregate predictors of entropy / dominant_frac are WEAK.
+      Spearman |rho| < 0.16 for n_afforded, grid size, color counts,
+      symmetry, and interface-shortcut rates (used_copy, n_showex,
+      n_reset, n_edits). No single feature on its own predicts
+      whether subjects will converge.
+
+  (d) Per-strategy usage IS predicted by task features, and the
+      predictors are interpretable. For each canonical strategy we
+      correlate the subjects' per-task usage share with task features:
+
+         Strategy        Predictor          Spearman ρ   p
+         ------------    ---------------    ----------   -------
+         object_first    n_success_cc       +0.39        0.001
+         color_first     n_colors_output    +0.48        <0.001
+         color_first     n_new_colors       +0.25        0.028
+         col_first       n_reset_mean       +0.34        0.003
+         col_first       symmetry_h         +0.30        0.010
+         row_first       n_success_cc       -0.27        0.021
+         random_k3       mean_cc_area       -0.58        <0.001
+         random_k3       max_cc_area        -0.47        <0.001
+         random_k3       n_cells_nonbg      -0.31        0.007
+
+      Reading this:
+        - More distinct connected components in Success => more
+          subjects draw object-by-object.
+        - More output colors => more subjects sort by color.
+        - Small outputs (few cells, tiny objects) produce chunk
+          patterns that match the synthetic random_k3 baseline; this
+          is mostly a measurement artefact (small outputs leave
+          little room for any single strategy signal to emerge) and
+          should be interpreted as "no canonical strategy dominates"
+          rather than "subjects really randomise".
+        - Horizontal symmetry and higher n_reset favour column-by-
+          column drawing; the reset signal is consistent with
+          subjects iterating vertical sweeps, hitting a mistake,
+          resetting, and restarting a column.
+
+  (e) The interface shortcuts (used_copy_mean, n_showex_mean,
+      n_reset_mean, n_edits_mean) show up only weakly. The strongest
+      interface signal is n_reset_mean -> col_first (+0.34); copy
+      usage and show-example usage do not meaningfully shift the
+      chosen strategy.
+
+Takeaway. Affordance is almost always 6; the task does NOT force
+humans into a single strategy. But task-intrinsic structure
+(#connected components, #colors, object size) biases WHICH strategy
+subjects most often match, and that bias is strong enough to give
+object / color / random-like signatures distinguishable at Spearman
+rho = 0.4-0.6. Humans reconcile task structure with personal style,
+and the structure-side of that reconciliation is what the heat-map
+in task_vs_strategy_figure.png visualises.
+
+Figure: prior_analysis/task_vs_strategy_figure.png  (panels A-E
+described in the figure docstring).
+
+
+------------------------------------------------------------------------
 5. CAVEATS
 ------------------------------------------------------------------------
 
@@ -406,7 +508,11 @@ From the repository root:
 
     python human_component_priority.py      # Section 1 outputs
     python human_chunking.py                # Section 2 outputs
-    python plot_drawing_strategy.py         # regenerates the figure
+    python human_vs_strategies.py           # Section 3/4 outputs
+    python plot_drawing_strategy.py         # regenerates drawing_strategy_figure
+    python plot_strategies.py               # regenerates strategies_vs_human_figure
+    python human_task_vs_strategy.py        # Section 4b outputs
+    python plot_task_vs_strategy.py         # regenerates task_vs_strategy_figure
 
 Each script resolves paths via _paths.py and writes into
 prior_analysis/. All three can be re-run independently; the figure
