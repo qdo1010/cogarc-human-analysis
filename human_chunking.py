@@ -107,6 +107,31 @@ def chunk_features(chunk: List[Dict]) -> Dict:
     else:
         n_cc = 0
 
+    # --- Secondary spatial axes (computed on the ordered edit sequence) ---
+    # A chunk's cells could also be organized by row, column, diagonal, or
+    # by being a contiguous chain in draw order.
+    same_row = bool(len(set(ys.tolist())) == 1)
+    same_col = bool(len(set(xs.tolist())) == 1)
+    # All cells share a single NW-SE or NE-SW diagonal (y-x or y+x is constant).
+    nw_se = bool(len(set((ys - xs).tolist())) == 1)
+    ne_sw = bool(len(set((ys + xs).tolist())) == 1)
+    on_diagonal = bool(nw_se or ne_sw) and not (same_row or same_col)
+    # Draw-order adjacency: fraction of consecutive edits that are
+    # Chebyshev-distance-1 from each other (i.e. the pen moved to a
+    # touching cell, not teleported).
+    if len(chunk) >= 2:
+        dx = np.abs(np.diff(xs))
+        dy = np.abs(np.diff(ys))
+        step = np.maximum(dx, dy)
+        nn_chain_rate = float((step <= 1).mean())
+    else:
+        nn_chain_rate = 1.0
+    # Compactness of the chunk's footprint inside its bbox.
+    bbox_h_ = int(ys.max() - ys.min() + 1)
+    bbox_w_ = int(xs.max() - xs.min() + 1)
+    bbox_area = int(bbox_h_ * bbox_w_)
+    fill_ratio = len(cells) / max(bbox_area, 1)
+
     return {
         "size": len(chunk),
         "n_cells": len(cells),
@@ -115,11 +140,16 @@ def chunk_features(chunk: List[Dict]) -> Dict:
         "color_homogeneity": dom_n / len(chunk),
         "bbox_ymin": int(ys.min()), "bbox_ymax": int(ys.max()),
         "bbox_xmin": int(xs.min()), "bbox_xmax": int(xs.max()),
-        "bbox_area": int((ys.max() - ys.min() + 1) * (xs.max() - xs.min() + 1)),
+        "bbox_area": bbox_area,
+        "fill_ratio": fill_ratio,
         "is_connected": bool(n_cc == 1),
         "cc_count": int(n_cc),
         "t_start": float(chunk[0].get("time", 0.0)),
         "t_end": float(chunk[-1].get("time", 0.0)),
+        "same_row": same_row,
+        "same_col": same_col,
+        "on_diagonal": on_diagonal,
+        "nn_chain_rate": nn_chain_rate,
     }
 
 

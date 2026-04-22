@@ -41,8 +41,8 @@ ARC_COLORS_HEX = {
 }
 _FNAME_RE = re.compile(r"^subj_([^_]+)_trial_([0-9a-f]+)\.json\.csv$")
 
-HIGH_TASK = "0d3d703e"
-LOW_TASK = "0d87d2a6"
+HIGH_TASK = "3aa6fb7a"   # 7x7, 89% of chunks span 2+ CCs
+LOW_TASK = "2bcee788"    # 10x10, 0% of chunks span 2+ CCs
 OUT = "prior_analysis/color_vs_cc_example.png"
 
 
@@ -183,10 +183,10 @@ def main():
     hi_pick = _pick_illustrative_subject(HIGH_TASK, prefer_cross=True)
     lo_pick = _pick_illustrative_subject(LOW_TASK, prefer_cross=False)
 
-    fig = plt.figure(figsize=(20, 11))
+    fig = plt.figure(figsize=(22, 14))
     gs = fig.add_gridspec(
         nrows=4, ncols=1,
-        height_ratios=[0.18, 1.0, 0.18, 1.0], hspace=0.45,
+        height_ratios=[0.15, 1.0, 0.15, 1.0], hspace=0.35,
     )
 
     # --- High color-over-CC: 0d3d703e ---

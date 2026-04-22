@@ -169,6 +169,68 @@ Actionable takeaway
     color edges dominate over the connectivity edges in the graph.
 
 
+Secondary segmentation axes (what else is a chunk beyond color?)
+----------------------------------------------------------------
+Color dominates within-chunk organization by construction — median
+color homogeneity is 1.0. The more informative question is:
+given that a chunk is a single color, what SPATIAL pattern does it
+follow?
+
+Restricting to the 87,201 color-homogeneous chunks of size >= 2
+(67 % of the full 130 k; size-1 chunks are atomic and have no
+secondary structure):
+
+    Organizing axis                                              rate
+    ----------------------------------------------------------   ----
+    one 4-connected blob                                         69 %
+    all cells on a single row                                    24 %
+    all cells on a single column                                 21 %
+    all cells on one diagonal                                     6 %
+    pen adjacency   (fraction of consecutive edits
+                      at Chebyshev distance <= 1)          mean  0.85
+    bbox fill ratio (n_cells / bbox_area)                  med   0.79
+
+Mutually exclusive buckets (adding to ~100 %):
+
+    connected 2D blob (not row / col)                            33 %
+    connected horizontal line    (same_row AND connected)        20 %
+    connected vertical line      (same_col AND connected)        17 %
+    connected diagonal line                                       6 %
+    same-row only (disconnected horizontal jumps)                 4 %
+    same-col only (disconnected vertical jumps)                   4 %
+    disconnected, off-axis (the jumping chunks)                  17 %
+
+Interpretation
+    The hierarchy of drawing axes, ordered by how strongly they
+    organize a chunk:
+
+        1. COLOR              — 95 %+ of chunks are monochromatic.
+        2. SPATIAL CONTIGUITY — ~70 % of chunks are a single
+                                 4-connected blob, and the pen
+                                 moves to a touching cell ~85 % of
+                                 the time.
+        3. AXIS ALIGNMENT     — 37 % of chunks are axis-aligned
+                                 line segments (horizontal or
+                                 vertical). "Draw a horizontal bar"
+                                 and "draw a vertical bar" are two
+                                 of the most common micro-strategies.
+        4. DIAGONAL           — rare but not zero, 6 %.
+
+    The 17 % "disconnected, off-axis" slice is the color-indexed
+    strategy: chunks where only color is shared between the cells,
+    and the participant is grouping same-color regions across
+    disjoint parts of the grid.
+
+Actionable takeaway
+    After color, spatial connectivity is the second-most-important
+    segmentation axis, but axis-alignment (pure row / pure column)
+    explains a further 37 % of chunks and is currently absent from
+    the ARC-GNN priors. Adding a pair of "row" and "column"
+    abstractions to the prior bank would directly model the
+    "draw one line at a time" micro-strategy that humans use roughly
+    as often as they fill in 2D blobs.
+
+
 ------------------------------------------------------------------------
 3. OUTPUTS
 ------------------------------------------------------------------------
