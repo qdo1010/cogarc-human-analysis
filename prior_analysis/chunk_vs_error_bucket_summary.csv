@@ -1,0 +1,5 @@
+bucket,n_trajectories,mean_iou_success,mean_iou_top_error,mean_delta,mean_frac_error_wins,mean_n_chunks
+cognitive,9018,0.165,0.202,0.036,0.266,9.631
+correct,322,0.457,0.501,0.044,0.132,6.829
+mixed,4513,0.132,0.157,0.025,0.212,8.226
+motor,254,0.284,0.363,0.079,0.307,15.118

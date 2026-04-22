@@ -473,6 +473,111 @@ described in the figure docstring).
 
 
 ------------------------------------------------------------------------
+4c. CHUNKS VS COMMON ERRORS (CAN CHUNKS DIAGNOSE WHICH TE?)
+------------------------------------------------------------------------
+
+Given that cognitive errors are systematic wrong plans, do chunks
+carry a signal about WHICH specific Top Error (TE) a participant
+committed? "TE" here follows the CogARC convention: each task has a
+Success grid plus TE1, TE2, TE3... ranked by how many participants
+submitted each wrong answer.
+
+Pipeline: human_chunks_vs_errors.py
+Figure:   prior_analysis/chunks_vs_errors_figure.png
+Outputs (prior_analysis/):
+  chunk_vs_error_per_trajectory.csv     (~14 000 trajectories)
+  chunk_vote_confusion.csv
+  chunk_vote_diag_confusion.csv
+  chunk_vote_diag_color_confusion.csv
+  chunk_error_pairwise.csv
+  chunk_error_abstention.csv
+  chunk_error_by_diagnosability.csv
+  chunk_error_per_subject.csv
+
+Procedure. For each trajectory segmented into pause-based chunks:
+  (i)   raw IoU vote: each chunk votes for whichever of the
+        {Success, TE1, TE2, TE3} grids gives the best IoU against
+        any of its 4-connected components.
+  (ii)  diagnostic-cells vote: only cells where labelL's color is
+        UNIQUE compared to all other labels contribute. This
+        eliminates cells that every label agrees on.
+  (iii) color-aware vote: each chunk's (y, x, color) triples are
+        matched against each label's diagnostic triples (so the
+        chunk matches a label only when the participant painted
+        THAT label's color at a distinguishing cell).
+  (iv)  weighted color-aware: sum of triple-matches across all
+        chunks in the trajectory (not winner-per-chunk).
+  (v)   first-quarter / first-half / last-half subsets of chunks.
+
+Ground-truth label = the participant's submission1.json matched
+against the known label grids for that task.
+
+Findings:
+
+  (a) RAW IoU vote is deceiving. Overall accuracy looks high (68%),
+      but that's driven almost entirely by Success trajectories
+      (78% of the data). Within error-ending trajectories, naive
+      vote falls to 7-18% per TE and loses to majority baseline.
+
+  (b) DIAGNOSTIC cells + COLOR-AWARE are required. Cell-only
+      diagnostic-vote raises the strict-cognitive accuracy from
+      17.5% to 28.3%. Color-aware voting (triple match) reaches
+      25.6% overall and 23.4% on TE3 (up from 17.2%).
+
+  (c) CLASS IMBALANCE IS THE CEILING. TE1 is ~60% of all error-
+      ending trajectories. No voting scheme beats "always predict
+      TE1" on TE1-vs-TE2 or TE1-vs-TE3 pairs. Chunks carry signal,
+      but the majority-class prior is stronger.
+
+  (d) On the BALANCED pair (TE2 vs TE3, high diagnosability
+      [pool >= 40]): color-aware chunk vote = 64.3% accuracy vs
+      50.0% majority baseline = +14.3 pp. The signal is real; you
+      just need a comparison with no dominant class.
+
+  (e) EARLY chunks predict BETTER than late chunks. On the
+      balanced subset:
+         first-quarter chunks : 74.1%   (+18.5 pp above baseline)
+         first-half chunks    : 69.7%   (+18.2 pp)
+         all chunks           : 64.3%   (+14.3 pp)
+         last-half chunks     : 48.3%   (-3.4 pp)
+      The wrong plan is visible at the start; late chunks add noise
+      (fixing, redoing, second-guessing).
+
+  (f) SUBJECT-LEVEL: error-prone is a stable personal trait; the
+      specific TE is not. Split-half Spearman across 226 subjects
+      (50 splits):
+         error_rate : rho = +0.35
+         te1_rate   : rho = +0.11
+         te2_rate   : rho = +0.05
+         te3_rate   : rho = +0.16
+      A person reliably errs more or less than others, but does
+      not reliably pick TE1 vs TE2 vs TE3 across trials.
+
+  (g) VARIANCE DECOMPOSITION: task identity explains 4-5x more of
+      each outcome than subject identity.
+         outcome        by task   by subject
+         any error       19.6%        4.8%
+         TE1             15.9%        3.0%
+         TE2              5.2%        3.1%
+         TE3              1.5%        3.5%
+      The bias is population-level-per-task, not personal.
+
+  (h) TASK DIAGNOSABILITY matters. Accuracy rises monotonically
+      with the size of the mutually-exclusive (y,x,color) triple
+      pool on each task: 10% (pool<5) -> 38% (pool>=40). Tasks
+      whose TEs differ by only a few cells are essentially
+      undiagnosable from chunks.
+
+Takeaway for GNN priors. Chunks give a weak but real
+task-conditional signal about which common error a participant
+is sliding toward. The useful abstraction is a task-level
+common-error prior (a per-task distribution over TEs, same for
+every subject) rather than a subject-specific one. The early-
+quarter chunk vote at 74% is a usable online signal if we later
+train against partial drawings.
+
+
+------------------------------------------------------------------------
 5. CAVEATS
 ------------------------------------------------------------------------
 
