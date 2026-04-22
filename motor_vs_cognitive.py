@@ -39,7 +39,7 @@ from human_style_features import DEFAULT_DATA_ROOT, _EXP2_EDIT_DIR, _parse_traje
 from human_targets import human_targets
 
 TASK_PNG_DIR = os.path.join(DEFAULT_DATA_ROOT, "Task example PNGs")
-TASK_JSON_DIR = "training"
+TASK_JSON_DIR = os.path.join(DEFAULT_DATA_ROOT, "Task JSONs")
 
 # Paper-quality defaults
 FIG_DPI = 260
