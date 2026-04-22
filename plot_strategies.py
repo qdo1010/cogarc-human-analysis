@@ -80,14 +80,28 @@ def _draw_grid(ax, grid, title=""):
 
 def _radar(ax, features, values_by_label):
     """Classic radar plot. values_by_label = {label: [v1, v2, ...]}."""
+    # Shorten the axis labels so they don't crowd each other.
+    short = {
+        "frac_single_color": "single\ncolor",
+        "frac_connected": "one\n4-connected\nblob",
+        "frac_same_row": "row-\naligned",
+        "frac_same_col": "col-\naligned",
+        "frac_multi_cc_same_color": "color-\njumps",
+        "frac_one_cc": "inside\none CC",
+        "mean_iou_cc": "IoU vs\nCC",
+        "mean_iou_color_class": "IoU vs\ncolor class",
+    }
+    labels = [short.get(f, f) for f in features]
+
     N = len(features)
     angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
     angles += [angles[0]]
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
     ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(features, fontsize=10)
-    ax.set_ylim(0, 1)
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.tick_params(axis="x", pad=18)   # push labels away from the axis
+    ax.set_ylim(0, 1.05)
     ax.set_yticks([0.25, 0.5, 0.75, 1.0])
     ax.set_yticklabels(["0.25", "0.5", "0.75", "1"], fontsize=9, color="#888")
     ax.grid(True, linestyle="--", alpha=0.4)
@@ -97,8 +111,8 @@ def _radar(ax, features, values_by_label):
                    key=lambda k: 0 if k != "human" else 1)
     for label in order:
         vals = values_by_label[label] + [values_by_label[label][0]]
-        lw = 2.8 if label == "human" else 1.4
-        alpha = 1.0 if label == "human" else 0.7
+        lw = 3.0 if label == "human" else 1.4
+        alpha = 1.0 if label == "human" else 0.6
         ax.plot(angles, vals, color=STRAT_COLORS[label],
                 lw=lw, label=label, alpha=alpha)
         if label == "human":
@@ -134,21 +148,24 @@ def build():
     }
 
     # ---- Figure layout: 2 rows. Top = A + B. Bottom = C examples. ----
-    fig = plt.figure(figsize=(22, 15))
+    fig = plt.figure(figsize=(24, 16))
     gs = fig.add_gridspec(
-        2, 3, width_ratios=[1.2, 1.0, 1.0], height_ratios=[1.0, 0.9],
-        hspace=0.35, wspace=0.35,
+        2, 3, width_ratios=[1.25, 1.0, 1.0], height_ratios=[1.05, 0.95],
+        hspace=0.40, wspace=0.40,
     )
 
     # --- A Radar ---
     axA = fig.add_subplot(gs[0, 0], projection="polar")
     _radar(axA, radar_feats, values_by_label)
-    axA.legend(loc="upper left", bbox_to_anchor=(-0.25, 1.15),
-               frameon=False, fontsize=12)
+    # Legend placed BELOW the radar so it does not hit the axis labels.
+    axA.legend(
+        loc="upper center", bbox_to_anchor=(0.5, -0.18),
+        ncol=4, frameon=False, fontsize=12,
+    )
     axA.set_title(
         "A.  Pooled chunk-feature fingerprint\n"
         "(humans in bold; all axes normalised to [0, 1])",
-        loc="left", pad=30,
+        loc="center", pad=28,
     )
 
     # --- B Per-task winner bars ---
@@ -187,19 +204,34 @@ def build():
     examples = [("object_first", pick.get("object_first")),
                 ("row_first", pick.get("row_first"))]
 
-    # Dedicate the bottom row to 2 examples × (Success + 3 strategies)
+    # Dedicate the bottom row to 2 examples × (Success + 3 strategies).
+    # Wider spacing between the two examples and between panels so the
+    # per-strategy titles don't collide.
     outer = gs[1, :]
-    ex_gs = outer.subgridspec(1, 2, wspace=0.1)
+    ex_gs = outer.subgridspec(1, 2, wspace=0.22)
     for ex_idx, (winner, tid) in enumerate(examples):
         if tid is None:
             continue
-        panel = ex_gs[0, ex_idx].subgridspec(1, 4, wspace=0.12)
+        panel = ex_gs[0, ex_idx].subgridspec(1, 4, wspace=0.26)
         success = _success_grid(tid)
-        # Grid success
-        ax1 = fig.add_subplot(panel[0, 0])
-        _draw_grid(ax1, success, title=f"Task {tid}\nSuccess grid")
 
-        # Chunks visualisation for each of 3 strategies: object, row, col
+        # Example header, placed above all four sub-panels via a
+        # transparent axis spanning the row.
+        ax_hdr = fig.add_subplot(ex_gs[0, ex_idx]); ax_hdr.set_axis_off()
+        ax_hdr.text(
+            0.0, 1.02,
+            f"Task {tid}     (winner: {winner})",
+            transform=ax_hdr.transAxes,
+            fontsize=14, fontweight="bold",
+            color=STRAT_COLORS[winner], ha="left", va="bottom",
+        )
+
+        # Panel 0: Success grid
+        ax1 = fig.add_subplot(panel[0, 0])
+        _draw_grid(ax1, success, title="Success")
+
+        # Panels 1-3: strategy renderings. Titles on two lines so they
+        # fit and the ✓ badge doesn't collide with siblings.
         for i, (label, fn) in enumerate((
                 ("object_first", strategy_object_first),
                 ("row_first", strategy_row_first),
@@ -214,13 +246,16 @@ def build():
                     ax.add_patch(Rectangle(
                         (e["x"] - 0.5, e["y"] - 0.5), 1, 1,
                         facecolor=ARC_COLORS_HEX.get(e["color"], "#fff"),
-                        edgecolor=face, linewidth=2.2))
-            title = f"{label}  ({len(chunks)} chunks)"
-            if label == winner:
-                title += "  ✓ matches humans"
-            ax.set_title(title, fontsize=11, pad=4,
-                         color=STRAT_COLORS[label] if label == winner else "#333",
-                         fontweight="bold" if label == winner else "normal")
+                        edgecolor=face, linewidth=2.0))
+            is_winner = (label == winner)
+            prefix = "✓ " if is_winner else ""
+            title = f"{prefix}{label}\n{len(chunks)} chunks"
+            ax.set_title(
+                title,
+                fontsize=11, pad=5,
+                color=STRAT_COLORS[label] if is_winner else "#333",
+                fontweight="bold" if is_winner else "normal",
+            )
             ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
             for s in ax.spines.values(): s.set_visible(False)
 
