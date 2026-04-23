@@ -10,6 +10,8 @@ prior_analysis/first_edit_heatmaps.npz
 prior_analysis/error_types.csv
 prior_analysis/exp1_trial_trends.csv
 prior_analysis/chunks_per_trajectory.csv
+prior_analysis/chunks_cognitive_units_by_chunk.csv
+prior_analysis/chunks_cognitive_units_rts_tagged.npy
 
 # Python
 __pycache__/
