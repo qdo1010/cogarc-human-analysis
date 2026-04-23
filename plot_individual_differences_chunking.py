@@ -94,18 +94,18 @@ def main():
 
     # ---- Panel B: lumper vs splitter scatter ----
     axB = fig.add_subplot(gs[0, 1])
-    x = merged["size"].values
-    y = merged["overall_error_rate"].values
+    from scipy.stats import spearmanr
+    pair = merged[["size", "overall_error_rate"]].dropna()
+    x = pair["size"].values
+    y = pair["overall_error_rate"].values
     axB.scatter(x, y, s=30, alpha=0.7, color="#2d6cdf",
                 edgecolors="black", linewidths=0.4)
-    # Best-fit line on ranks -> display
-    from scipy.stats import spearmanr
     rho, p = spearmanr(x, y)
-    # Simple linear fit in original space for visual
     coef = np.polyfit(x, y, 1)
     xs = np.linspace(x.min(), x.max(), 50)
+    p_str = f"p = {p:.1e}" if p >= 1e-3 else f"p < 1e-3"
     axB.plot(xs, np.polyval(coef, xs), color="#b84a3d", lw=2,
-             label=f"Spearman ρ = {rho:.2f}   (p = {p:.1e})")
+             label=f"Spearman ρ = {rho:.2f}  ({p_str}, n = {len(x)})")
     axB.set_xlabel("mean chunk size (cells per chunk)")
     axB.set_ylabel("overall error rate")
     axB.set_title("B. Lumpers outperform splitters",
